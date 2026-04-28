@@ -313,7 +313,7 @@ def get_teams_summary(db: Session = Depends(get_db)):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
