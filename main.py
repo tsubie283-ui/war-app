@@ -28,7 +28,8 @@ def fetch_war(db: Session = Depends(get_db)):
     print(list(war_data.keys())[:20])
 
     players = db.query(Player).all()
-
+    print("PLAYERS COUNT:", len(players))
+    print("FIRST PLAYER:", players[0] if players else None)
     for p in players:
         if p.player_id in war_data:
             upsert_war(db, p.player_id, war_data[p.player_id], "bat")
