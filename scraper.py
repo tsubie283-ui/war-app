@@ -4,6 +4,9 @@ from bs4 import BeautifulSoup
 BASE_URL = "https://www.fangraphs.com/leaders/major-league"
 
 def _fetch_war(url):
+    headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     res = requests.get(url)
     soup = BeautifulSoup(res.text, "html.parser")
 
