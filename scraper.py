@@ -4,24 +4,11 @@ from bs4 import BeautifulSoup
 BASE_URL = "https://www.fangraphs.com/leaders/major-league"
 
 def _fetch_war(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-
-    res = requests.get(url, headers=headers)
-
-    print("STATUS:", res.status_code)
-    print("URL:", res.url)
-
-    print("=== HTML PREVIEW ===")
-    print(res.text[:2000])
-
+    res = requests.get(url)
     soup = BeautifulSoup(res.text, "html.parser")
 
-    rows = soup.select("table tbody tr")
-    print("ROWS FOUND:", len(rows))
-
     data = {}
+    rows = soup.select("table tbody tr")
 
     for row in rows:
         link = row.select_one("a")
@@ -46,6 +33,7 @@ def _fetch_war(url):
     print(f"FETCHED {len(data)} PLAYERS")
 
     return data
+
 
 # 🔵 打者WAR
 def fetch_war_leaders_bat():
