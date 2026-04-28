@@ -8,7 +8,7 @@ def _fetch_war(url):
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
 
-
+res = requests.get(url, headers=headers)
 print("STATUS:", res.status_code)
     print("URL:", res.url)
 
