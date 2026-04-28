@@ -5,54 +5,47 @@ BASE_URL = "https://www.fangraphs.com/leaders/major-league"
 
 def _fetch_war(url):
     headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
 
-res = requests.get(url, headers=headers)
-print("STATUS:", res.status_code)
+    res = requests.get(url, headers=headers)
+
+    print("STATUS:", res.status_code)
     print("URL:", res.url)
 
-    # ★ここが最重要
     print("=== HTML PREVIEW ===")
     print(res.text[:2000])
 
     soup = BeautifulSoup(res.text, "html.parser")
 
-    data = {}
     rows = soup.select("table tbody tr")
-
     print("ROWS FOUND:", len(rows))
 
-#    res = requests.get(url)
-#    soup = BeautifulSoup(res.text, "html.parser")
+    data = {}
 
-#    data = {}
-#    rows = soup.select("table tbody tr")
+    for row in rows:
+        link = row.select_one("a")
+        if not link:
+            continue
 
-#    for row in rows:
-#        link = row.select_one("a")
-#        if not link:
-#            continue
+        href = link.get("href", "")
+        try:
+            player_id = int(href.split("/")[-2])
+        except:
+            continue
 
-#        href = link.get("href", "")
-#        try:
-#            player_id = int(href.split("/")[-2])
-#        except:
-#            continue
+        war_td = row.select("td")[-1]
 
-#        war_td = row.select("td")[-1]
+        try:
+            fwar = float(war_td.text.strip())
+        except:
+            continue
 
-#        try:
-#            fwar = float(war_td.text.strip())
-#        except:
-#            continue
+        data[player_id] = fwar
 
-#        data[player_id] = fwar
-
-#    print(f"FETCHED {len(data)} PLAYERS")
+    print(f"FETCHED {len(data)} PLAYERS")
 
     return data
-
 
 # 🔵 打者WAR
 def fetch_war_leaders_bat():
