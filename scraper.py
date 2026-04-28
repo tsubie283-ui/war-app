@@ -7,33 +7,49 @@ def _fetch_war(url):
     headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
-    res = requests.get(url)
+
+
+print("STATUS:", res.status_code)
+    print("URL:", res.url)
+
+    # ★ここが最重要
+    print("=== HTML PREVIEW ===")
+    print(res.text[:2000])
+
     soup = BeautifulSoup(res.text, "html.parser")
 
     data = {}
     rows = soup.select("table tbody tr")
 
-    for row in rows:
-        link = row.select_one("a")
-        if not link:
-            continue
+    print("ROWS FOUND:", len(rows))
 
-        href = link.get("href", "")
-        try:
-            player_id = int(href.split("/")[-2])
-        except:
-            continue
+#    res = requests.get(url)
+#    soup = BeautifulSoup(res.text, "html.parser")
 
-        war_td = row.select("td")[-1]
+#    data = {}
+#    rows = soup.select("table tbody tr")
 
-        try:
-            fwar = float(war_td.text.strip())
-        except:
-            continue
+#    for row in rows:
+#        link = row.select_one("a")
+#        if not link:
+#            continue
 
-        data[player_id] = fwar
+#        href = link.get("href", "")
+#        try:
+#            player_id = int(href.split("/")[-2])
+#        except:
+#            continue
 
-    print(f"FETCHED {len(data)} PLAYERS")
+#        war_td = row.select("td")[-1]
+
+#        try:
+#            fwar = float(war_td.text.strip())
+#        except:
+#            continue
+
+#        data[player_id] = fwar
+
+#    print(f"FETCHED {len(data)} PLAYERS")
 
     return data
 
