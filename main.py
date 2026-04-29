@@ -5,7 +5,7 @@ from models import Team, TeamPlayer, Player, WarSnapshot
 from crud import upsert_war, set_manual_war
 from scraper import fetch_war_leaders_bat, fetch_war_leaders_pit
 from collections import defaultdict
-
+from flask import render_template
 Base.metadata.create_all(bind=engine)
 
 app = Flask(__name__)
@@ -337,6 +337,205 @@ def teams_summary():
 
     return jsonify(result)
 
+@app.route("/ui/teams")
+def ui_teams():
+    db = SessionLocal()
+
+    teams = db.query(Team).all()
+
+    result = []
+    all_dates = set()
+    histories = {}
+
+    for team in teams:
+        players = (
+            db.query(Player)
+            .join(TeamPlayer, Player.player_id == TeamPlayer.player_id)
+            .filter(TeamPlayer.team_id == team.id)
+            .all()
+        )
+
+        history = defaultdict(float)
+        total = 0  # ★ Total WAR用
+
+        for p in players:
+
+            # -------------------------
+            # 最新WAR（Total用）
+            # -------------------------
+            latest_war = (
+                db.query(WarSnapshot)
+                .filter_by(player_id=p.player_id)
+                .order_by(WarSnapshot.date.desc())
+                .first()
+            )
+
+            if latest_war and latest_war.fwar_final is not None:
+                total += latest_war.fwar_final
+
+            # -------------------------
+            # 全履歴（Timeline用）
+            # -------------------------
+            records = (
+                db.query(WarSnapshot)
+                .filter_by(player_id=p.player_id)
+                .all()
+            )
+
+            for r in records:
+                if r.fwar_final is not None:
+                    date = r.date.isoformat()
+                    history[date] = round(history[date] + r.fwar_final, 3)
+                    all_dates.add(date)
+
+        histories[team.id] = history
+
+        result.append({
+            "id": team.id,
+            "name": team.name,
+            "total_war": round(total, 2)
+        })
+
+    db.close()
+
+    return render_template(
+        "teams.html",
+        teams=result,
+        dates=sorted(all_dates),
+        histories=histories
+    )
+
+@app.route("/ui/teams/<int:team_id>")
+def ui_team(team_id):
+    db = SessionLocal()
+
+    team = db.query(Team).filter_by(id=team_id).first()
+
+    players = (
+        db.query(Player)
+        .join(TeamPlayer, Player.player_id == TeamPlayer.player_id)
+        .filter(TeamPlayer.team_id == team_id)
+        .all()
+    )
+
+    # -----------------------------
+    # ① 最新WAR（上の表）
+    # -----------------------------
+    latest_players = []
+
+    # -----------------------------
+    # ② 日付収集（下の表の横軸）
+    # -----------------------------
+    all_dates = set()
+
+    # player_id -> {date: war}
+    matrix = {}
+
+    for p in players:
+        records = (
+            db.query(WarSnapshot)
+            .filter_by(player_id=p.player_id)
+            .order_by(WarSnapshot.date.asc())
+            .all()
+        )
+
+        player_map = {}
+        latest = 0
+
+        for r in records:
+            date = r.date.isoformat()
+            war = r.fwar_final or 0
+
+            player_map[date] = war
+            all_dates.add(date)
+
+            latest = war  # 最後が最新
+
+        matrix[p.name] = player_map
+
+        latest_players.append({
+            "name": p.name,
+            "latest": latest
+        })
+
+    db.close()
+
+    sorted_dates = sorted(all_dates)
+
+    return render_template(
+        "team.html",
+        team=team,
+        latest_players=latest_players,
+        dates=sorted_dates,
+        matrix=matrix
+    )
+
+@app.route("/ui/teams/<int:team_id>/players")
+def ui_team_players(team_id):
+    db = SessionLocal()
+
+    team = db.query(Team).filter_by(id=team_id).first()
+
+    players = (
+        db.query(Player)
+        .join(TeamPlayer, Player.player_id == TeamPlayer.player_id)
+        .filter(TeamPlayer.team_id == team_id)
+        .all()
+    )
+
+    result = []
+
+    for p in players:
+        records = (
+            db.query(WarSnapshot)
+            .filter_by(player_id=p.player_id)
+            .order_by(WarSnapshot.date.asc())
+            .all()
+        )
+
+        history = []
+        for r in records:
+            history.append({
+                "date": r.date.isoformat(),
+                "war": r.fwar_final or 0
+            })
+
+        result.append({
+            "name": p.name,
+            "history": history
+        })
+
+    db.close()
+
+    return render_template("players.html", team=team, players=result)
+
+
+
+@app.route("/fetch-war-all", methods=["POST"])
+def fetch_war_all():
+    db = SessionLocal()
+
+    # BAT
+    bat_data = fetch_war_leaders_bat()
+    print("BAT FETCHED:", len(bat_data))
+
+    players = db.query(Player).all()
+
+    for p in players:
+        if p.player_id in bat_data:
+            upsert_war(db, p.player_id, bat_data[p.player_id], "bat")
+
+    # PIT
+    pit_data = fetch_war_leaders_pit()
+    print("PIT FETCHED:", len(pit_data))
+
+    for p in players:
+        if p.player_id in pit_data:
+            upsert_war(db, p.player_id, pit_data[p.player_id], "pit")
+
+    db.close()
+
+    return {"status": "bat + pit updated"}
 
 # ---------------- RUN ----------------
 

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ team.name }}</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px;
+            text-align: center;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f4f4f4;
+        }
+
+        /* 横スクロール */
+        .scroll {
+            overflow-x: auto;
+            max-width: 100%;
+        }
+
+        h3 {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>{{ team.name }}</h2>
+
+<a href="/ui/teams">← back</a>
+
+---
+
+# ✔ ① 最新WAR一覧
+
+<h3>Latest WAR</h3>
+
+<table>
+    <tr>
+        <th>Player</th>
+        <th>WAR</th>
+    </tr>
+
+    {% for p in latest_players %}
+    <tr>
+        <td>{{ p.name }}</td>
+        <td>{{ p.latest }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+---
+
+# ✔ ② 日別WARマトリクス
+
+<h3>WAR Timeline</h3>
+
+<div class="scroll">
+<table>
+    <tr>
+        <th>Player</th>
+        {% for d in dates %}
+        <th>{{ d }}</th>
+        {% endfor %}
+    </tr>
+
+    {% for name, data in matrix.items() %}
+    <tr>
+        <td>{{ name }}</td>
+
+        {% for d in dates %}
+        <td>
+            {{ data.get(d, 0) }}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</table>
+</div>
+
+</body>
+</html>

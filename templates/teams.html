@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teams</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; }
+        th { background: #f4f4f4; }
+    </style>
+
+<style>
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 6px;
+    text-align: center;
+    font-size: 12px;
+}
+
+th {
+    background: #f4f4f4;
+}
+</style>
+
+</head>
+<body>
+
+<form action="/fetch-war-all" method="post">
+    <button style="
+        padding:10px 15px;
+        background:#4CAF50;
+        color:white;
+        border:none;
+        border-radius:5px;
+        cursor:pointer;
+        margin-bottom:15px;
+    ">
+        Update BAT + PIT WAR
+    </button>
+</form>
+
+
+<h2>Teams</h2>
+
+<table>
+    <tr>
+        <th>Team</th>
+        <th>Total WAR</th>
+        <th>Detail</th>
+    </tr>
+
+    {% for t in teams %}
+    <tr>
+        <td>{{ t.name }}</td>
+        <td>{{ t.total_war }}</td>
+        <td><a href="/ui/teams/{{ t.id }}">open</a></td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>WAR Timeline</h3>
+
+<table>
+    <tr>
+        <th>Team</th>
+        {% for d in dates %}
+        <th>{{ d }}</th>
+        {% endfor %}
+    </tr>
+
+    {% for t in teams %}
+    <tr>
+        <td>{{ t.name }}</td>
+
+        {% for d in dates %}
+        <td>
+            {{ histories[t.id].get(d, 0) }}
+        </td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</table>
+
+
+</body>
+</html>
