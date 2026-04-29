@@ -1,27 +1,30 @@
-from fastapi import FastAPI, Depends
+from flask import Flask, jsonify, request
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 from models import Team, TeamPlayer, Player, WarSnapshot
 from crud import upsert_war, set_manual_war
 from scraper import fetch_war_leaders_bat, fetch_war_leaders_pit
-from fastapi.middleware.cors import CORSMiddleware
 from collections import defaultdict
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = Flask(__name__)
+
+# ---------------- DB ----------------
 
 def get_db():
     db = SessionLocal()
     try:
-        yield db
+        return db
     finally:
         db.close()
 
 # ---------------- WAR ----------------
 
-@app.post("/fetch-war")
-def fetch_war(db: Session = Depends(get_db)):
+@app.route("/fetch-war", methods=["POST"])
+def fetch_war():
+    db = SessionLocal()
+
     war_data = fetch_war_leaders_bat()
 
     print("=== BAT WAR KEYS ===")
@@ -29,15 +32,19 @@ def fetch_war(db: Session = Depends(get_db)):
 
     players = db.query(Player).all()
     print("PLAYERS COUNT:", len(players))
-    print("FIRST PLAYER:", players[0] if players else None)
+
     for p in players:
         if p.player_id in war_data:
             upsert_war(db, p.player_id, war_data[p.player_id], "bat")
 
-    return {"status": "bat updated"}
+    db.close()
+    return jsonify({"status": "bat updated"})
 
-@app.post("/fetch-war-pit")
-def fetch_war_pit(db: Session = Depends(get_db)):
+
+@app.route("/fetch-war-pit", methods=["POST"])
+def fetch_war_pit():
+    db = SessionLocal()
+
     war_data = fetch_war_leaders_pit()
 
     print("=== PIT WAR KEYS ===")
@@ -49,18 +56,17 @@ def fetch_war_pit(db: Session = Depends(get_db)):
         if p.player_id in war_data:
             upsert_war(db, p.player_id, war_data[p.player_id], "pit")
 
-    return {"status": "pit updated"}
+    db.close()
+    return jsonify({"status": "pit updated"})
 
-@app.put("/war")
-def update_war(player_id: int, value: float, db: Session = Depends(get_db)):
-    set_manual_war(db, player_id, value)
-    return {"status": "updated"}
 
-@app.get("/war")
-def get_war(db: Session = Depends(get_db)):
+@app.route("/war", methods=["GET"])
+def get_war():
+    db = SessionLocal()
+
     records = db.query(WarSnapshot).all()
 
-    return [
+    result = [
         {
             "player_id": r.player_id,
             "date": r.date.isoformat() if r.date else None,
@@ -71,30 +77,74 @@ def get_war(db: Session = Depends(get_db)):
         for r in records
     ]
 
+    db.close()
+    return jsonify(result)
+
+
+@app.route("/war", methods=["PUT"])
+def update_war():
+    data = request.get_json()
+
+    player_id = data.get("player_id")
+    value = data.get("value")
+
+    db = SessionLocal()
+    set_manual_war(db, player_id, value)
+    db.close()
+
+    return jsonify({"status": "updated"})
+
 # ---------------- PLAYER ----------------
 
-@app.get("/players")
-def get_players(db: Session = Depends(get_db)):
-    return db.query(Player).all()
+@app.route("/players", methods=["GET"])
+def get_players():
+    db = SessionLocal()
+    players = db.query(Player).all()
+    db.close()
+
+    return jsonify([
+        {"player_id": p.player_id, "name": p.name}
+        for p in players
+    ])
 
 # ---------------- TEAM ----------------
 
-@app.post("/teams")
-def create_team(name: str, owner_name: str = None, db: Session = Depends(get_db)):
-    team = Team(name=name, owner_name=owner_name)
+@app.route("/teams", methods=["POST"])
+def create_team():
+    data = request.get_json()
+
+    db = SessionLocal()
+    team = Team(name=data["name"], owner_name=data.get("owner_name"))
     db.add(team)
     db.commit()
     db.refresh(team)
-    return team
+    db.close()
 
-@app.get("/teams")
-def get_teams(db: Session = Depends(get_db)):
-    return db.query(Team).all()
+    return jsonify({"id": team.id, "name": team.name})
+
+
+@app.route("/teams", methods=["GET"])
+def get_teams():
+    db = SessionLocal()
+    teams = db.query(Team).all()
+    db.close()
+
+    return jsonify([
+        {"id": t.id, "name": t.name}
+        for t in teams
+    ])
 
 # ---------------- TEAM PLAYERS ----------------
 
-@app.post("/teams/{team_id:int}/players")
-def add_player_to_team(team_id: int, player_id: int, name: str = None, db: Session = Depends(get_db)):
+@app.route("/teams/<int:team_id>/players", methods=["POST"])
+def add_player(team_id):
+    data = request.get_json()
+
+    player_id = data["player_id"]
+    name = data.get("name")
+
+    db = SessionLocal()
+
     player = db.query(Player).filter_by(player_id=player_id).first()
 
     if not player:
@@ -103,78 +153,41 @@ def add_player_to_team(team_id: int, player_id: int, name: str = None, db: Sessi
         db.commit()
 
     exists = db.query(TeamPlayer).filter_by(team_id=team_id, player_id=player_id).first()
+
     if exists:
-        return {"status": "already exists"}
+        db.close()
+        return jsonify({"status": "already exists"})
 
     tp = TeamPlayer(team_id=team_id, player_id=player_id)
     db.add(tp)
     db.commit()
+    db.close()
 
-    return {"status": "added"}
+    return jsonify({"status": "added"})
 
-@app.delete("/teams/{team_id:int}/players/{player_id}")
-def remove_player_from_team(team_id: int, player_id: int, db: Session = Depends(get_db)):
+
+@app.route("/teams/<int:team_id>/players/<int:player_id>", methods=["DELETE"])
+def remove_player(team_id, player_id):
+    db = SessionLocal()
+
     tp = db.query(TeamPlayer).filter_by(team_id=team_id, player_id=player_id).first()
 
     if not tp:
-        return {"error": "not found"}
+        db.close()
+        return jsonify({"error": "not found"})
 
     db.delete(tp)
     db.commit()
+    db.close()
 
-    return {"status": "removed"}
-
-@app.put("/teams/{team_id}/players/{player_id}")
-def update_player_id(
-    team_id: int,
-    player_id: int,
-    new_player_id: int,
-    db: Session = Depends(get_db)
-):
-    # 紐付け取得
-    tp = (
-        db.query(TeamPlayer)
-        .filter_by(team_id=team_id, player_id=player_id)
-        .first()
-    )
-
-    if not tp:
-        return {"error": "player not found in team"}
-
-    # 重複チェック
-    exists = (
-        db.query(TeamPlayer)
-        .filter_by(team_id=team_id, player_id=new_player_id)
-        .first()
-    )
-
-    if exists:
-        return {"error": "new player already exists in team"}
-
-    # 元のPlayer（名前保持用）
-    old_player = db.query(Player).filter_by(player_id=player_id).first()
-
-    # 新IDのPlayer
-    player = db.query(Player).filter_by(player_id=new_player_id).first()
-
-    if not player:
-        player = Player(
-            player_id=new_player_id,
-            name=old_player.name if old_player else f"Player {new_player_id}"
-        )
-        db.add(player)
-        db.commit()
-
-    # ★ ここは必ず実行する（重要）
-    tp.player_id = new_player_id
-    db.commit()
-
-    return {"status": "updated"}
+    return jsonify({"status": "removed"})
 
 # ---------------- TEAM DETAIL ----------------
 
-@app.get("/teams/{team_id:int}")
-def get_team(team_id: int, db: Session = Depends(get_db)):
+@app.route("/teams/<int:team_id>", methods=["GET"])
+def get_team(team_id):
+    db = SessionLocal()
+
     team = db.query(Team).filter_by(id=team_id).first()
 
     players = (
@@ -200,16 +213,20 @@ def get_team(team_id: int, db: Session = Depends(get_db)):
             "fwar": war.fwar_final if war else None
         })
 
-    return {
+    db.close()
+
+    return jsonify({
         "team_id": team.id,
         "team_name": team.name,
         "players": result_players
-    }
+    })
 
-# ---------------- HISTORY ----------------
+# ---------------- WAR HISTORY ----------------
 
-@app.get("/teams/{team_id:int}/war-history")
-def get_team_war_history(team_id: int, db: Session = Depends(get_db)):
+@app.route("/teams/<int:team_id>/war-history", methods=["GET"])
+def war_history(team_id):
+    db = SessionLocal()
+
     players = (
         db.query(Player)
         .join(TeamPlayer, Player.player_id == TeamPlayer.player_id)
@@ -225,15 +242,19 @@ def get_team_war_history(team_id: int, db: Session = Depends(get_db)):
             if r.fwar_final:
                 history[r.date.isoformat()] += r.fwar_final
 
-    return [
+    db.close()
+
+    return jsonify([
         {"date": d, "total_war": history[d]}
         for d in sorted(history.keys())
-    ]
+    ])
 
 # ---------------- WAR TABLE ----------------
 
-@app.get("/teams/{team_id:int}/war-table")
-def get_team_war_table(team_id: int, db: Session = Depends(get_db)):
+@app.route("/teams/<int:team_id>/war-table", methods=["GET"])
+def war_table(team_id):
+    db = SessionLocal()
+
     players = (
         db.query(Player)
         .join(TeamPlayer, Player.player_id == TeamPlayer.player_id)
@@ -263,15 +284,19 @@ def get_team_war_table(team_id: int, db: Session = Depends(get_db)):
             "wars": [player_data[p.player_id].get(d) for d in sorted_dates]
         })
 
-    return {
+    db.close()
+
+    return jsonify({
         "dates": sorted_dates,
         "players": result
-    }
+    })
 
-# ---------------- SUMMARY（★修正済） ----------------
+# ---------------- SUMMARY ----------------
 
-@app.get("/teams-summary")
-def get_teams_summary(db: Session = Depends(get_db)):
+@app.route("/teams-summary", methods=["GET"])
+def teams_summary():
+    db = SessionLocal()
+
     teams = db.query(Team).all()
     result = []
 
@@ -308,13 +333,12 @@ def get_teams_summary(db: Session = Depends(get_db)):
             "total_war": team_total
         })
 
-    return result
+    db.close()
 
-# ---------------- CORS ----------------
+    return jsonify(result)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+# ---------------- RUN ----------------
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=True)
